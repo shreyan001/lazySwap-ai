@@ -24,7 +24,7 @@ config();
 const sideShiftAPI = createSideShiftAPI(process.env.SIDESHIFT_SECRET || '');
 
 const model = new ChatGroq({
-    modelName: "Llama3-8b-8192",
+    modelName: "llama-3.3-70b-versatile",
     temperature:0,
   apiKey: process.env.GROQ_API_KEY,
 });
