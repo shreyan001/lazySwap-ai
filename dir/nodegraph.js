@@ -1,22 +1,33 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.default = nodegraph;
 const sideshift_api_1 = require("./sideshift-api");
-const dotenv_1 = __importDefault(require("dotenv"));
+const dotenv = __importStar(require("dotenv"));
 // Load environment variables
-dotenv_1.default.config();
+dotenv.config();
 const prompts_1 = require("@langchain/core/prompts");
 const langgraph_1 = require("@langchain/langgraph");
 const langgraph_2 = require("@langchain/langgraph");
@@ -25,17 +36,17 @@ const output_parsers_1 = require("@langchain/core/output_parsers");
 const messages_1 = require("@langchain/core/messages");
 const langgraph_3 = require("@langchain/langgraph");
 const groq_1 = require("@langchain/groq");
-const dotenv_2 = require("dotenv");
-(0, dotenv_2.config)();
+const dotenv_1 = require("dotenv");
+(0, dotenv_1.config)();
 const sideShiftAPI = (0, sideshift_api_1.createSideShiftAPI)(process.env.SIDESHIFT_SECRET || '');
 const model = new groq_1.ChatGroq({
-    modelName: "Llama3-8b-8192",
+    modelName: "llama-3.3-70b-versatile",
     temperature: 0,
     apiKey: process.env.GROQ_API_KEY,
 });
-const sideShiftValidation = (_a) => __awaiter(void 0, [_a], void 0, function* ({ sourceChain, sourceToken, destChain, destToken }) {
+const sideShiftValidation = async ({ sourceChain, sourceToken, destChain, destToken }) => {
     // Get available coins from SideShift API
-    const coins = yield sideShiftAPI.getCoins();
+    const coins = await sideShiftAPI.getCoins();
     // Find source and destination coins
     const sourceCoin = coins.find(coin => coin.coin.toLowerCase() === sourceToken.toLowerCase() ||
         coin.name.toLowerCase().includes(sourceToken.toLowerCase()));
@@ -55,8 +66,9 @@ const sideShiftValidation = (_a) => __awaiter(void 0, [_a], void 0, function* ({
         return `Destination token "${destToken}" only supports fixed swaps.`;
     }
     return "SUCCESS";
-});
+};
 function nodegraph() {
+    console.log("🚀 Initializing nodegraph...");
     const graph = new langgraph_1.StateGraph({
         channels: {
             messages: {
@@ -67,103 +79,162 @@ function nodegraph() {
             }
         }
     });
-    graph.addNode("initial_node", (state) => __awaiter(this, void 0, void 0, function* () {
+    graph.addNode("initial_node", async (state) => {
+        console.log("📝 INITIAL_NODE - Received state:", {
+            messagesCount: state.messages?.length || 0,
+            lastMessage: state.messages?.[state.messages.length - 1]?.content?.substring(0, 100) + "...",
+            swapValues: state.swapValues
+        });
         const SYSTEM_TEMPLATE = `You are LazySwap, an AI-powered Telegram bot facilitating cross-chain cryptocurrency swaps powered by SideShift API.
-        Be concise yet friendly in your responses.
-        Your main functions are:
-        1. Assist users in performing cross-chain swaps using simple, conversational interactions.
-        2. Provide information about available tokens and networks supported by the SideShift API.
-        3. Guide users through the swap process step-by-step.
-        4. Answer basic questions about LazySwap and cross-chain swaps.
-        
-        Tokens refer to the digital assets you want to swap, such as cryptocurrencies like ETH, BTC, USDT, USDC, and many others. Networks refer to the blockchain networks these tokens reside on.
-        
-        SideShift supports a wide variety of cryptocurrencies and networks including:
-        - Bitcoin (BTC) on Bitcoin network
-        - Ethereum (ETH) on Ethereum network
-        - USDT on multiple networks (Ethereum, Tron, etc.)
-        - USDC on multiple networks (Ethereum, Polygon, etc.)
-        - And many other popular cryptocurrencies
-        
-        When a user wants to perform a swap, gather the following information conversationally:
-        - The token symbol they want to swap from (source token)
-        - The network of the source token (if applicable)
-        - The token symbol they want to swap to (destination token)
-        - The network of the destination token (if applicable)
-        - The amount they want to swap
-        - The destination address where they want to receive the swapped tokens
-        
-        Ensure the following conditions are met:
-        - Only accept token symbols that are supported by SideShift (we validate this automatically)
-        - The minimum swap amount varies by token - we'll validate this through the API
-        - Users must provide a valid destination address for the token they're receiving
-        
-        Always ensure you have all required fields (source token, destination token, amount, destination address) before proceeding.
-        
-        Validate the provided tokens against SideShift's supported list. If any token is invalid or not supported, inform the user and ask for clarification.
-        
-        Once you have all the required information, reorder and display it to the user in the following format for the next support bot to easily make a decision:
-        'You want to swap [amount] [source token] to [destination token].
-        
-        Before we proceed, I just want to confirm the details:
-        
-        * Source Token: [source token]
-        * Destination Token: [destination token]
-        * Amount: [amount]
-        * Destination Address: [destination address]'
-        
-        If any information is missing, ask the user conversationally for clarification (e.g., "Could you please specify which network you want to use for your USDT?").
+
+🚀 **Welcome Message**: Always start your first response with a friendly greeting like "Hi there! Welcome to LazySwap! 👋" or "Hello! I'm LazySwap, your friendly crypto swap assistant! 🚀"
+
+Be warm, conversational, and helpful in all your responses. Use emojis appropriately to make interactions more engaging.
+
+Your main functions are:
+1. 🔄 Assist users in performing cross-chain swaps using simple, conversational interactions
+2. 📋 Provide information about available tokens and networks supported by the SideShift API
+3. 🎯 Guide users through the swap process step-by-step with clear instructions
+4. ❓ Answer questions about LazySwap and cross-chain swaps in a friendly manner
+
+**Supported Assets**: SideShift supports a wide variety of cryptocurrencies and networks including:
+- Bitcoin (BTC) on Bitcoin network
+- Ethereum (ETH) on Ethereum network  
+- USDT on multiple networks (Ethereum, Tron, etc.)
+- USDC on multiple networks (Ethereum, Polygon, etc.)
+- And many other popular cryptocurrencies
+
+**Swap Process**: When a user wants to perform a swap, gather the following information conversationally:
+- The token symbol they want to swap from (source token)
+- The network of the source token (if applicable)
+- The token symbol they want to swap to (destination token)  
+- The network of the destination token (if applicable)
+- The amount they want to swap
+- The destination address where they want to receive the swapped tokens
+
+**Validation Requirements**:
+- Only accept token symbols that are supported by SideShift (we validate this automatically)
+- The minimum swap amount varies by token - we'll validate this through the API
+- Users must provide a valid destination address for the token they're receiving
+
+Always ensure you have all required fields (source token, destination token, amount, destination address) before proceeding.
+
+If any token is invalid or not supported, inform the user politely and ask for clarification with suggestions.
+
+**Confirmation Format**: Once you have all the required information, display it to the user in this format:
+'Great! Let me confirm your swap details:
+
+🔄 **Swap Summary**:
+* From: [amount] [source token]
+* To: [destination token]  
+* Destination Address: [destination address]
+
+Does this look correct? If yes, I'll proceed with getting you a quote!'
+
+If any information is missing, ask the user conversationally for clarification (e.g., "Could you please specify which network you want to use for your USDT? 🤔").
+
+**Tone**: Always be friendly, helpful, and encouraging. Use phrases like "I'd be happy to help!", "Great choice!", "Let's get that swap set up for you!", etc.
         `;
         const prompt = prompts_1.ChatPromptTemplate.fromMessages([
             ["system", SYSTEM_TEMPLATE],
             new prompts_2.MessagesPlaceholder("messages"),
         ]);
-        const response = yield prompt.pipe(model).invoke({ messages: state.messages });
+        const response = await prompt.pipe(model).invoke({ messages: state.messages });
+        console.log("📤 INITIAL_NODE - Generated response:", typeof response.content === 'string' ? response.content.substring(0, 200) + "..." : response.content.toString().substring(0, 200) + "...");
         return {
             messages: [response]
         };
-    }));
+    });
     /* @ts-ignore */
     graph.addEdge(langgraph_3.START, "initial_node");
     /* @ts-ignore */
-    graph.addConditionalEdges("initial_node", (state) => __awaiter(this, void 0, void 0, function* () {
-        const SYSTEM_TEMPLATE = `You are a support system for the LazySwap bot responsible for routing the conversation to either the pre-check node or continuing the conversation.
-Your task is to discern whether the user has provided all the necessary information for a swap or if the conversation is still ongoing.`;
-        const HUMAN_TEMPLATE = `Analyze the following user message:
+    graph.addConditionalEdges("initial_node", async (state) => {
+        console.log("🔀 CONDITIONAL_EDGE - Analyzing state for routing:", {
+            messagesCount: state.messages?.length || 0,
+            lastMessage: state.messages?.[state.messages.length - 1]?.content?.substring(0, 100) + "..."
+        });
+        // Get the user's message (not the bot's response)
+        const userMessages = state.messages?.filter(msg => msg instanceof messages_1.HumanMessage) || [];
+        const lastUserMessage = userMessages[userMessages.length - 1]?.content || "";
+        console.log("🔍 CONDITIONAL_EDGE - User message being analyzed:", lastUserMessage);
+        const SYSTEM_TEMPLATE = `You are a routing system for LazySwap bot. Analyze user messages to determine if they contain a COMPLETE swap request.
 
-{messages}
+A COMPLETE swap request must have ALL of these elements clearly stated:
+1. Source token (what they want to swap FROM)
+2. Destination token (what they want to swap TO) 
+3. Amount (how much they want to swap)
 
-Extract the following information from the message if it is present:
-1. Source token
-2. Source chain
-3. Destination token
-4. Destination chain
-5. Amount to swap
+Examples of COMPLETE requests:
+- "Swap 0.1 ETH to USDC"
+- "Exchange 100 USDT for BTC"
+- "Convert 1 BTC to ETH"
 
-If all required information is present, respond with "PRECHECK".
-If any information is missing or the bot is responding to questions, respond with "RESPOND".
+Examples of INCOMPLETE requests (casual conversation):
+- "hi there I do not get it what is this"
+- "ok"
+- "what is LazySwap?"
+- "how does this work?"
+- "I want to swap ETH" (missing amount and destination)
+- "swap 0.1 ETH" (missing destination)
 
-Remember, only respond with one of the above words.`;
+Only respond with "PRECHECK" if ALL THREE elements (source token, destination token, amount) are clearly present.
+Otherwise respond with "CONTINUE" for casual conversation or incomplete requests.`;
         const prompt = prompts_1.ChatPromptTemplate.fromMessages([
             ["system", SYSTEM_TEMPLATE],
-            ["human", HUMAN_TEMPLATE],
+            ["human", "Analyze this user message: {message}"],
         ]);
         const chain = prompt.pipe(model).pipe(new output_parsers_1.StringOutputParser());
-        console.log(state.messages[state.messages.length - 1].content, "yo mfs this is the state what you gonna do");
-        const rawCategorization = yield chain.invoke({ messages: state.messages[state.messages.length - 1].content });
+        const rawCategorization = await chain.invoke({ message: lastUserMessage });
+        console.log("🎯 CONDITIONAL_EDGE - Categorization result:", rawCategorization);
         if (rawCategorization.includes("PRECHECK")) {
-            console.log("precheck");
+            console.log("➡️ CONDITIONAL_EDGE - Routing to precheck (complete swap request)");
             return "precheck";
         }
         else {
-            console.log("conversational");
-            return "conversational";
+            console.log("➡️ CONDITIONAL_EDGE - Continuing conversation");
+            return "continue";
         }
-    }), {
+    }, {
         precheck: "precheck_node",
-        conversational: langgraph_2.END,
+        continue: "conversation_node",
     });
-    graph.addNode("precheck_node", (state) => __awaiter(this, void 0, void 0, function* () {
+    // Add conversation node for casual chat
+    graph.addNode("conversation_node", async (state) => {
+        console.log("💬 CONVERSATION_NODE - Handling casual conversation:", {
+            messagesCount: state.messages?.length || 0,
+            lastMessage: state.messages?.[state.messages.length - 1]?.content?.substring(0, 100) + "..."
+        });
+        // Get the user's message
+        const userMessages = state.messages?.filter(msg => msg instanceof messages_1.HumanMessage) || [];
+        const lastUserMessage = userMessages[userMessages.length - 1]?.content || "";
+        const systemTemplate = `You are LazySwap, a friendly crypto swap assistant. You help users understand how to use the service and answer their questions.
+
+Key points about LazySwap:
+- You help swap crypto across different chains
+- Users can make swap requests with simple text commands
+- Examples: "Swap 0.1 ETH to USDC", "Exchange 100 USDT for BTC", "Convert 1 BTC to ETH"
+- You need the source token, destination token, and amount to process a swap
+
+Be helpful, friendly, and guide users toward making proper swap requests when they're ready.
+Keep responses concise and encouraging.`;
+        const humanTemplate = "User message: {message}";
+        const prompt = prompts_1.ChatPromptTemplate.fromMessages([
+            ["system", systemTemplate],
+            ["human", humanTemplate],
+        ]);
+        const chain = prompt.pipe(model).pipe(new output_parsers_1.StringOutputParser());
+        const response = await chain.invoke({ message: lastUserMessage });
+        console.log("💬 CONVERSATION_NODE - Generated response:", response);
+        return {
+            messages: [new messages_1.AIMessage(response)]
+        };
+    });
+    graph.addNode("precheck_node", async (state) => {
+        console.log("🔍 PRECHECK_NODE - Received state:", {
+            messagesCount: state.messages?.length || 0,
+            lastMessage: state.messages?.[state.messages.length - 1]?.content?.substring(0, 100) + "...",
+            swapValues: state.swapValues
+        });
         const systemTemplate = `You are an expert at verifying details for cross-chain swaps. Extract the following information from the user's input:
         1. Source chain
         2. Source token
@@ -181,23 +252,24 @@ Remember, only respond with one of the above words.`;
         ]);
         const message = state.messages[state.messages.length - 1].content;
         const chain = chatPrompt.pipe(model).pipe(new output_parsers_1.StringOutputParser());
-        const result = yield chain.invoke({ input: message });
-        console.log(result);
+        const result = await chain.invoke({ input: message });
+        console.log("📊 PRECHECK_NODE - Raw extraction result:", result);
         // Parse the JSON result
         let parsedResult;
         try {
             parsedResult = JSON.parse(result);
-            console.log(parsedResult);
+            console.log("✅ PRECHECK_NODE - Parsed result:", parsedResult);
         }
         catch (error) {
-            console.log("Failed to parse JSON:", error);
+            console.error("❌ PRECHECK_NODE - Failed to parse JSON:", error);
             return {
                 messages: [new messages_1.AIMessage("ERROR: There was an internal error please try again")]
             };
         }
         // Validate the parsed result using sideShiftValidation
-        const validationResult = yield sideShiftValidation(parsedResult);
-        console.log(validationResult);
+        console.log("🔄 PRECHECK_NODE - Validating with SideShift...");
+        const validationResult = await sideShiftValidation(parsedResult);
+        console.log("🎯 PRECHECK_NODE - Validation result:", validationResult);
         if (validationResult === "SUCCESS") {
             const swapValues = {
                 sourceChain: parsedResult.sourceChain,
@@ -210,44 +282,143 @@ Remember, only respond with one of the above words.`;
             if (parsedResult.destAddress !== null && parsedResult.destAddress !== undefined) {
                 swapValues.destAddress = parsedResult.destAddress;
             }
+            console.log("✅ PRECHECK_NODE - Success! Setting swapValues:", swapValues);
             return {
                 messages: [new messages_1.AIMessage("Tokens are available to swap on SideShift proceeding to generate quote")],
                 swapValues: swapValues
             };
         }
         else {
-            console.error("Validation failed:", validationResult);
+            console.error("❌ PRECHECK_NODE - Validation failed:", validationResult);
             return {
                 messages: [new messages_1.AIMessage(validationResult)]
             };
         }
-    }));
+    });
     /* @ts-ignore */
     graph.addConditionalEdges("precheck_node", (state) => {
-        // Check if swapValues exist and have all the necessary properties
+        console.log("🔀 PRECHECK_CONDITIONAL - Checking state for routing:", {
+            swapValues: state.swapValues,
+            hasBasicValues: !!(state.swapValues &&
+                state.swapValues.sourceToken &&
+                state.swapValues.destToken &&
+                state.swapValues.amount),
+            hasDestAddress: !!state.swapValues?.destAddress
+        });
+        // Check if we have basic swap info but missing destination address
         if (state.swapValues &&
-            state.swapValues.sourceChain &&
             state.swapValues.sourceToken &&
-            state.swapValues.destChain &&
             state.swapValues.destToken &&
-            state.swapValues.amount) {
-            console.log("Routing to getQuote_node");
+            state.swapValues.amount &&
+            !state.swapValues.destAddress) {
+            console.log("➡️ PRECHECK_CONDITIONAL - Routing to collect_address_node (missing destination address)");
+            return "collectAddress";
+        }
+        // Check if we have all information including destination address
+        else if (state.swapValues &&
+            state.swapValues.sourceToken &&
+            state.swapValues.destToken &&
+            state.swapValues.amount &&
+            state.swapValues.destAddress) {
+            console.log("➡️ PRECHECK_CONDITIONAL - Routing to getQuote_node (all info complete)");
             return "getQuote";
         }
         else {
             // If swap values are not complete, end the conversation
-            console.log("Ending conversation");
+            console.log("➡️ PRECHECK_CONDITIONAL - Ending conversation (incomplete values)");
             return "end";
         }
     }, {
+        collectAddress: "collect_address_node",
         getQuote: "getQuote_node",
         end: langgraph_2.END
     });
-    graph.addNode("getQuote_node", (state) => __awaiter(this, void 0, void 0, function* () {
+    // Add node to collect destination address
+    graph.addNode("collect_address_node", async (state) => {
+        console.log("📍 COLLECT_ADDRESS_NODE - Requesting destination address:", {
+            swapValues: state.swapValues
+        });
+        const sourceToken = state.swapValues?.sourceToken || "tokens";
+        const destToken = state.swapValues?.destToken || "tokens";
+        const amount = state.swapValues?.amount || "amount";
+        const message = `Great! I can help you swap ${amount} ${sourceToken.toUpperCase()} to ${destToken.toUpperCase()}.
+
+🔑 **To proceed, I need your ${destToken.toUpperCase()} destination address.**
+
+Please provide the wallet address where you want to receive your ${destToken.toUpperCase()} tokens.
+
+⚠️ **Important**: Make sure the address is correct and supports ${destToken.toUpperCase()} tokens. Incorrect addresses may result in permanent loss of funds.`;
+        return {
+            messages: [new messages_1.AIMessage(message)]
+        };
+    });
+    // Add conditional routing from collect_address_node
+    /* @ts-ignore */
+    graph.addConditionalEdges("collect_address_node", async (state) => {
+        console.log("🔀 COLLECT_ADDRESS_CONDITIONAL - Analyzing for destination address:", {
+            messagesCount: state.messages?.length || 0,
+            lastMessage: state.messages?.[state.messages.length - 1]?.content?.substring(0, 100) + "..."
+        });
+        // Get the user's message (not the bot's response)
+        const userMessages = state.messages?.filter(msg => msg instanceof messages_1.HumanMessage) || [];
+        const lastUserMessage = userMessages[userMessages.length - 1]?.content || "";
+        // Convert to string if it's not already
+        const messageText = typeof lastUserMessage === 'string' ? lastUserMessage : String(lastUserMessage);
+        console.log("🔍 COLLECT_ADDRESS_CONDITIONAL - User message:", messageText);
+        // Simple address validation - check if it looks like a crypto address
+        const addressPattern = /^[a-zA-Z0-9]{25,}$/; // Basic pattern for crypto addresses
+        if (addressPattern.test(messageText.trim())) {
+            console.log("✅ COLLECT_ADDRESS_CONDITIONAL - Valid address detected, updating state");
+            // Update the state with the destination address
+            const updatedSwapValues = {
+                ...state.swapValues,
+                destAddress: messageText.trim()
+            };
+            // Return the updated state along with the routing decision
+            state.swapValues = updatedSwapValues;
+            return "getQuote";
+        }
+        else {
+            console.log("❌ COLLECT_ADDRESS_CONDITIONAL - Invalid address format, asking again");
+            return "askAgain";
+        }
+    }, {
+        getQuote: "getQuote_node",
+        askAgain: "ask_address_again_node"
+    });
+    // Add node to ask for address again if invalid
+    graph.addNode("ask_address_again_node", async (state) => {
+        console.log("🔄 ASK_ADDRESS_AGAIN_NODE - Invalid address provided");
+        const destToken = state.swapValues?.destToken || "token";
+        const message = `❌ The address you provided doesn't appear to be valid.
+
+Please provide a valid ${destToken.toUpperCase()} wallet address. It should be a long string of letters and numbers (typically 25+ characters).
+
+Example formats:
+• Bitcoin: 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa
+• Ethereum: 0x742d35Cc6634C0532925a3b8D4C9db96590e4265
+• Other tokens: Similar format depending on the network
+
+Please try again with your ${destToken.toUpperCase()} address:`;
+        return {
+            messages: [new messages_1.AIMessage(message)]
+        };
+    });
+    // Route back to collect address after asking again
+    /* @ts-ignore */
+    graph.addEdge("ask_address_again_node", "collect_address_node");
+    graph.addNode("getQuote_node", async (state) => {
+        console.log("💰 GETQUOTE_NODE - Received state:", {
+            swapValues: state.swapValues,
+            quoteId: state.quoteId
+        });
         try {
             // First check permissions
-            const permissions = yield sideShiftAPI.checkPermissions();
+            console.log("🔐 GETQUOTE_NODE - Checking permissions...");
+            const permissions = await sideShiftAPI.checkPermissions();
+            console.log("🔐 GETQUOTE_NODE - Permissions result:", permissions);
             if (!permissions.createShift) {
+                console.log("❌ GETQUOTE_NODE - Permissions denied");
                 return {
                     messages: [new messages_1.AIMessage("❌ Sorry, SideShift.ai is not available in your region. Please check the supported jurisdictions.")],
                 };
@@ -271,8 +442,9 @@ Remember, only respond with one of the above words.`;
                 depositAmount: state.swapValues.amount,
                 affiliateId: process.env.AFFILIATE_ID || ''
             };
-            console.log('Quote request:', quoteRequest);
-            const quoteResponse = yield sideShiftAPI.requestQuote(quoteRequest);
+            console.log('💰 GETQUOTE_NODE - Quote request:', quoteRequest);
+            const quoteResponse = await sideShiftAPI.requestQuote(quoteRequest);
+            console.log('💰 GETQUOTE_NODE - Quote response:', quoteResponse);
             // Store quote ID in state for fixed shift creation
             const deposit = parseFloat(state.swapValues.amount);
             const receive = parseFloat(quoteResponse.settleAmount);
@@ -291,6 +463,7 @@ The rate is locked in and includes all fees.
 
 <b>🔑 Please enter your destination address to proceed with the swap.</b>
 `;
+            console.log('✅ GETQUOTE_NODE - Success! Generated quote message');
             return {
                 messages: [new messages_1.AIMessage(result)],
                 quoteId: quoteResponse.id,
@@ -298,25 +471,30 @@ The rate is locked in and includes all fees.
             };
         }
         catch (error) {
-            console.error('Quote error:', error);
+            console.error('❌ GETQUOTE_NODE - Quote error:', error);
             return {
                 messages: [new messages_1.AIMessage("😕 Oops! There was an error getting your quote. This could be due to insufficient liquidity or unsupported trading pair. Please try again with different parameters.")],
             };
         }
-    }));
+    });
     /* @ts-ignore */
     graph.addConditionalEdges("getQuote_node", (state) => {
         const lastMessage = state.messages[state.messages.length - 1].content;
+        console.log("🔀 GETQUOTE_CONDITIONAL - Analyzing message for routing:", {
+            messagePreview: lastMessage.substring(0, 100) + "...",
+            hasDestAddress: !!state.swapValues?.destAddress,
+            destAddress: state.swapValues?.destAddress
+        });
         if (lastMessage.includes("Please enter your destination address to proceed with the swap.") && state.swapValues.destAddress) {
-            console.log("Routing to generateDeposit_node");
+            console.log("➡️ GETQUOTE_CONDITIONAL - Routing to generateDeposit_node");
             return "generateDeposit";
         }
         else if (lastMessage.includes("Sorry, there was an error processing your request.") || lastMessage.includes("Please try again with different parameters.")) {
-            console.log("Ending conversation");
+            console.log("➡️ GETQUOTE_CONDITIONAL - Ending conversation (error)");
             return "end";
         }
         else {
-            console.log("Destination address not found in response, ending conversation");
+            console.log("➡️ GETQUOTE_CONDITIONAL - Ending conversation (no dest address or other reason)");
             return "end";
         }
     }, {
@@ -324,11 +502,16 @@ The rate is locked in and includes all fees.
         end: langgraph_2.END
     });
     /* @ts-ignore */
-    graph.addNode("generateDeposit_node", (state) => __awaiter(this, void 0, void 0, function* () {
-        var _a;
+    graph.addNode("generateDeposit_node", async (state) => {
+        console.log("🏦 GENERATEDEPOSIT_NODE - Received state:", {
+            quoteId: state.quoteId,
+            swapValues: state.swapValues,
+            quoteResponse: state.quoteResponse ? "Present" : "Missing"
+        });
         try {
             // Check if we have a quote ID for fixed shift
             if (!state.quoteId) {
+                console.log("❌ GENERATEDEPOSIT_NODE - No quote ID found");
                 return {
                     messages: [new messages_1.AIMessage("❌ No valid quote found. Please start over to get a new quote.")],
                 };
@@ -339,11 +522,12 @@ The rate is locked in and includes all fees.
                 affiliateId: process.env.AFFILIATE_ID || '',
                 quoteId: state.quoteId
             };
-            console.log('Fixed shift request:', fixedShiftRequest);
-            const result = yield sideShiftAPI.createFixedShiftFromQuote(fixedShiftRequest);
+            console.log('🏦 GENERATEDEPOSIT_NODE - Fixed shift request:', fixedShiftRequest);
+            const result = await sideShiftAPI.createFixedShiftFromQuote(fixedShiftRequest);
+            console.log('🏦 GENERATEDEPOSIT_NODE - Fixed shift response:', result);
             // Use the original quote amounts from state since SwapResponse doesn't have settleAmount
             const deposit = parseFloat(state.swapValues.amount);
-            const receive = parseFloat(((_a = state.quoteResponse) === null || _a === void 0 ? void 0 : _a.settleAmount) || '0');
+            const receive = parseFloat(state.quoteResponse?.settleAmount || '0');
             const networkFee = parseFloat(result.settleCoinNetworkFee || '0');
             const networkFeeUsd = parseFloat(result.networkFeeUsd || '0');
             const expiresAt = new Date(result.expiresAt).toLocaleString();
@@ -373,7 +557,7 @@ The rate is locked in and includes all fees.
 
 <b>⚠️ Warning:</b> Send the exact amount shown. Sending less may result in a refund with fees deducted.
             `;
-            console.log(resultMessage);
+            console.log("✅ GENERATEDEPOSIT_NODE - Success! Generated deposit message");
             return {
                 messages: [new messages_1.AIMessage(resultMessage)],
                 depositAddress: result.depositAddress,
@@ -381,14 +565,18 @@ The rate is locked in and includes all fees.
             };
         }
         catch (error) {
-            console.error('Fixed shift creation error:', error);
+            console.error('❌ GENERATEDEPOSIT_NODE - Fixed shift creation error:', error);
             return {
                 messages: [new messages_1.AIMessage(`😕 Sorry, there was an error creating your swap. Please make sure you have provided a valid destination address: ${state.swapValues.destAddress}. The quote may have also expired - please try again.`)],
             };
         }
-    }));
+    });
     /* @ts-ignore */
     graph.addEdge("generateDeposit_node", langgraph_2.END);
+    // Add edge from conversation_node to END
+    /* @ts-ignore */
+    graph.addEdge("conversation_node", langgraph_2.END);
+    console.log("✅ Nodegraph compilation complete!");
     return graph.compile();
 }
 ;

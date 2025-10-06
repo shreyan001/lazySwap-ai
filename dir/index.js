@@ -1,19 +1,26 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
-var __asyncValues = (this && this.__asyncValues) || function (o) {
-    if (!Symbol.asyncIterator) throw new TypeError("Symbol.asyncIterator is not defined.");
-    var m = o[Symbol.asyncIterator], i;
-    return m ? m.call(o) : (o = typeof __values === "function" ? __values(o) : o[Symbol.iterator](), i = {}, verb("next"), verb("throw"), verb("return"), i[Symbol.asyncIterator] = function () { return this; }, i);
-    function verb(n) { i[n] = o[n] && function (v) { return new Promise(function (resolve, reject) { v = o[n](v), settle(resolve, reject, v.done, v.value); }); }; }
-    function settle(resolve, reject, d, v) { Promise.resolve(v).then(function(v) { resolve({ value: v, done: d }); }, reject); }
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
 };
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
@@ -26,8 +33,12 @@ const memory_1 = require("langchain/memory");
 const chains_1 = require("langchain/chains");
 const langgraph_1 = require("@langchain/langgraph");
 const messages_1 = require("@langchain/core/messages");
-const nodegraph_js_1 = __importDefault(require("./nodegraph.js"));
+const nodegraph_1 = __importDefault(require("./nodegraph"));
 const sideshift_api_1 = require("./sideshift-api");
+const express_1 = __importDefault(require("express"));
+const cors_1 = __importDefault(require("cors"));
+const QRCode = __importStar(require("qrcode"));
+const net = __importStar(require("net"));
 const dotenv_1 = require("dotenv");
 (0, dotenv_1.config)();
 // Initialize Cloudflare Workers AI model
@@ -41,28 +52,33 @@ const bot = new telegraf_1.Telegraf(process.env.TELEGRAM_BOT_TOKEN);
 bot.use((0, telegraf_1.session)());
 // Initialize session
 bot.use((ctx, next) => {
-    var _a;
-    (_a = ctx.session) !== null && _a !== void 0 ? _a : (ctx.session = {
+    console.log("🔧 SESSION_INIT - Initializing session for user:", ctx.from?.username || ctx.from?.id);
+    ctx.session ?? (ctx.session = {
         chain: new chains_1.ConversationChain({ llm: model, memory: new memory_1.BufferMemory() }),
-        graph: (0, nodegraph_js_1.default)(),
+        graph: (0, nodegraph_1.default)(),
         messages: []
     });
+    console.log("✅ SESSION_INIT - Session ready, messages count:", ctx.session.messages.length);
     return next();
 });
 // Refresh command
-bot.command('refresh', (ctx) => __awaiter(void 0, void 0, void 0, function* () {
+bot.command('refresh', async (ctx) => {
+    console.log("🔄 REFRESH_CMD - User requested session refresh:", ctx.from?.username || ctx.from?.id);
     if (ctx.session) {
         ctx.session.messages = [];
-        ctx.session.graph = (0, nodegraph_js_1.default)();
-        yield ctx.reply('Your session has been refreshed. You can start a new conversation now.');
+        ctx.session.graph = (0, nodegraph_1.default)();
+        console.log("✅ REFRESH_CMD - Session refreshed successfully");
+        await ctx.reply('Your session has been refreshed. You can start a new conversation now.');
     }
     else {
-        yield ctx.reply('Unable to refresh session. Please try again later.');
+        console.error("❌ REFRESH_CMD - No session found");
+        await ctx.reply('Unable to refresh session. Please try again later.');
     }
-}));
+});
 // Define the permanent keyboard
 bot.command('start', (ctx) => {
     const username = ctx.message.from.username || 'there';
+    console.log("🚀 START_CMD - User started bot:", username, "ID:", ctx.from?.id);
     const welcomeMessage = `
   Hey ${username}! 👋 Welcome to LazySwap! 🚀
 
@@ -88,16 +104,20 @@ bot.command('start', (ctx) => {
     ]));
 });
 // Handle button presses
-bot.hears("🔄 Refresh", (ctx) => __awaiter(void 0, void 0, void 0, function* () {
+bot.hears("🔄 Refresh", async (ctx) => {
+    console.log("🔄 REFRESH_BTN - User clicked refresh button:", ctx.from?.username || ctx.from?.id);
     if (ctx.session) {
         ctx.session.messages = [];
-        yield ctx.reply('Your session has been refreshed. You can start a new conversation now.');
+        console.log("✅ REFRESH_BTN - Session messages cleared");
+        await ctx.reply('Your session has been refreshed. You can start a new conversation now.');
     }
     else {
-        yield ctx.reply('Unable to refresh session. Please try again later.');
+        console.error("❌ REFRESH_BTN - No session found");
+        await ctx.reply('Unable to refresh session. Please try again later.');
     }
-}));
-bot.hears("ℹ️ Help", (ctx) => __awaiter(void 0, void 0, void 0, function* () {
+});
+bot.hears("ℹ️ Help", async (ctx) => {
+    console.log("ℹ️ HELP_BTN - User requested help:", ctx.from?.username || ctx.from?.id);
     const helpMessage = `
 Here are the available commands:
 
@@ -107,66 +127,245 @@ Here are the available commands:
 To start a swap, simply send a message like:
 "I want to swap 0.1 BTC to ETH"
   `;
-    yield ctx.reply(helpMessage);
-}));
+    await ctx.reply(helpMessage);
+});
 // Don't forget to launch your bot
 // Handle text messages
-bot.on((0, filters_1.message)('text'), (ctx) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a, e_1, _b, _c;
+bot.on((0, filters_1.message)('text'), async (ctx) => {
+    console.log("💬 MESSAGE_HANDLER - Received message from:", ctx.from?.username || ctx.from?.id);
+    console.log("📝 MESSAGE_HANDLER - Message content:", ctx.message.text);
     const session = ctx.session;
+    if (!session) {
+        console.error("❌ MESSAGE_HANDLER - No session found");
+        await ctx.reply('Session error. Please use /start to initialize.');
+        return;
+    }
+    console.log("📊 MESSAGE_HANDLER - Current session state:", {
+        messagesCount: session.messages.length,
+        hasGraph: !!session.graph
+    });
     try {
         // Send a loading message
-        const loadingMessage = yield ctx.reply('Processing your request... 🔄');
+        console.log("⏳ MESSAGE_HANDLER - Sending loading message...");
+        const loadingMessage = await ctx.reply('Processing your request... 🔄');
         // Add user message to the session messages
+        console.log("➕ MESSAGE_HANDLER - Adding user message to session");
         session.messages.push(new messages_1.HumanMessage(ctx.message.text));
         const userMessages = new messages_1.HumanMessage(ctx.message.text);
+        console.log("🔄 MESSAGE_HANDLER - Starting graph stream with messages:", session.messages.length);
         // Use the graph to process the message
-        const stream = yield session.graph.stream({ messages: session.messages });
+        const stream = await session.graph.stream({ messages: session.messages });
         let lastResponse = '';
-        try {
-            for (var _d = true, stream_1 = __asyncValues(stream), stream_1_1; stream_1_1 = yield stream_1.next(), _a = stream_1_1.done, !_a; _d = true) {
-                _c = stream_1_1.value;
-                _d = false;
-                const value = _c;
-                const [nodeName, output] = Object.entries(value)[0];
+        let nodeCount = 0;
+        console.log("🌊 MESSAGE_HANDLER - Processing graph stream...");
+        for await (const value of stream) {
+            nodeCount++;
+            const [nodeName, output] = Object.entries(value)[0];
+            console.log(`🔗 GRAPH_STREAM - Node ${nodeCount}: ${nodeName}`);
+            console.log(`📤 GRAPH_STREAM - Output preview:`, typeof output === 'object' && output && 'messages' in output && Array.isArray(output.messages) ? output.messages[0]?.content?.toString().substring(0, 100) + "..." : "No messages");
+            /* @ts-ignore */
+            console.log(nodeName, output.messages[0].content);
+            if (nodeName !== langgraph_1.END) {
                 /* @ts-ignore */
-                console.log(nodeName, output.messages[0].content);
-                if (nodeName !== langgraph_1.END) {
-                    /* @ts-ignore */
-                    lastResponse = output.messages[0].content;
-                }
+                lastResponse = output.messages[0].content;
+                console.log(`✅ GRAPH_STREAM - Updated lastResponse from ${nodeName}`);
             }
         }
-        catch (e_1_1) { e_1 = { error: e_1_1 }; }
-        finally {
-            try {
-                if (!_d && !_a && (_b = stream_1.return)) yield _b.call(stream_1);
-            }
-            finally { if (e_1) throw e_1.error; }
-        }
+        console.log(`🏁 MESSAGE_HANDLER - Graph processing complete. Processed ${nodeCount} nodes`);
+        console.log("📋 MESSAGE_HANDLER - Final response length:", lastResponse.length);
         // Delete the loading message
-        yield ctx.telegram.deleteMessage(ctx.chat.id, loadingMessage.message_id);
+        console.log("🗑️ MESSAGE_HANDLER - Deleting loading message...");
+        await ctx.telegram.deleteMessage(ctx.chat.id, loadingMessage.message_id);
         // Send AI response to user
-        yield ctx.reply(lastResponse, { parse_mode: 'HTML' });
+        console.log("📤 MESSAGE_HANDLER - Sending final response to user");
+        await ctx.reply(lastResponse, { parse_mode: 'HTML' });
+        // Check for deposit channel ID for QR code
         const channelIdRegex = /(\d+)-\w+-\d+/;
         const match = lastResponse.match(channelIdRegex);
         if (match) {
             const depositChannelId = match[0];
+            console.log("🔍 MESSAGE_HANDLER - Found deposit channel ID:", depositChannelId);
             // Check if the chat is a group or supergroup
             const isGroup = ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
+            console.log("👥 MESSAGE_HANDLER - Chat type:", ctx.chat.type, "isGroup:", isGroup);
             if (!isGroup) {
-                yield ctx.reply('You can check your transaction status or scan QR code to complete the transaction', telegraf_1.Markup.inlineKeyboard([
+                console.log("🎯 MESSAGE_HANDLER - Sending QR code button for private chat");
+                await ctx.reply('You can check your transaction status or scan QR code to complete the transaction', telegraf_1.Markup.inlineKeyboard([
                     telegraf_1.Markup.button.webApp('Open Payment QR', `https://lazyswapbot.vercel.app/?id=${depositChannelId}`)
                 ]));
             }
+            else {
+                console.log("🚫 MESSAGE_HANDLER - Skipping QR code button for group chat");
+            }
         }
+        else {
+            console.log("🔍 MESSAGE_HANDLER - No deposit channel ID found in response");
+        }
+        console.log("✅ MESSAGE_HANDLER - Message processing completed successfully");
     }
     catch (error) {
-        console.error('Error:', error);
-        yield ctx.reply('Sorry, I encountered an error.');
+        console.error('❌ MESSAGE_HANDLER - Error occurred:', error);
+        console.error('❌ MESSAGE_HANDLER - Error stack:', error.stack);
+        await ctx.reply('Sorry, I encountered an error.');
     }
-}));
+});
+// Port availability checker
+async function isPortAvailable(port) {
+    return new Promise((resolve) => {
+        const server = net.createServer();
+        server.listen(port, () => {
+            server.once('close', () => resolve(true));
+            server.close();
+        });
+        server.on('error', () => resolve(false));
+    });
+}
+// Find available port starting from 3000
+async function findAvailablePort(startPort = 3000) {
+    console.log(`🔍 PORT_FINDER - Searching for available port starting from ${startPort}`);
+    for (let port = startPort; port <= startPort + 100; port++) {
+        const available = await isPortAvailable(port);
+        if (available) {
+            console.log(`✅ PORT_FINDER - Found available port: ${port}`);
+            return port;
+        }
+        else {
+            console.log(`❌ PORT_FINDER - Port ${port} is busy, trying next...`);
+        }
+    }
+    throw new Error('No available ports found in range');
+}
+// Initialize Express app
+console.log("🏭 INDEX_SERVER - Initializing Express application");
+const app = (0, express_1.default)();
+// Initialize SideShift API
+console.log("🔑 INDEX_SERVER - Initializing SideShift API with secret:", process.env.SIDESHIFT_SECRET ? 'Present' : 'Missing');
+const apiClient = (0, sideshift_api_1.createSideShiftAPI)(process.env.SIDESHIFT_SECRET || '');
+//// Middleware
+console.log("⚙️ INDEX_SERVER - Setting up middleware");
+app.use((0, cors_1.default)());
+app.use(express_1.default.json());
+app.use(express_1.default.static('public'));
+// Active swaps storage
+console.log("💾 INDEX_SERVER - Active swaps storage initialized");
+const activeSwaps = new Map();
+// Health check endpoint
+app.get('/health', (req, res) => {
+    res.json({
+        status: 'healthy',
+        timestamp: new Date().toISOString(),
+        services: {
+            api: 'running',
+            telegram: 'configured',
+            sideshift: 'configured'
+        }
+    });
+});
+// Get available coins
+app.get('/api/coins', async (req, res) => {
+    try {
+        const coins = await apiClient.getCoins();
+        res.json(coins);
+    }
+    catch (error) {
+        console.error('Error fetching coins:', error);
+        res.status(500).json({ error: 'Failed to fetch coins' });
+    }
+});
+// Get permissions
+app.get('/api/permissions', async (req, res) => {
+    try {
+        const permissions = await apiClient.checkPermissions();
+        res.json(permissions);
+    }
+    catch (error) {
+        console.error('Error checking permissions:', error);
+        res.status(500).json({ error: 'Failed to check permissions' });
+    }
+});
+// Create variable swap
+app.post('/api/swap/variable', async (req, res) => {
+    try {
+        const swapRequest = req.body;
+        const swap = await apiClient.createVariableSwap(swapRequest);
+        activeSwaps.set(swap.id, swap);
+        res.json(swap);
+    }
+    catch (error) {
+        console.error('Error creating variable swap:', error);
+        res.status(500).json({ error: 'Failed to create variable swap' });
+    }
+});
+// Create fixed swap
+app.post('/api/swap/fixed', async (req, res) => {
+    try {
+        const swapRequest = req.body;
+        const swap = await apiClient.createFixedSwap(swapRequest);
+        activeSwaps.set(swap.id, swap);
+        res.json(swap);
+    }
+    catch (error) {
+        console.error('Error creating fixed swap:', error);
+        res.status(500).json({ error: 'Failed to create fixed swap' });
+    }
+});
+// Get swap status
+app.get('/api/swap/:id', async (req, res) => {
+    try {
+        const swapId = req.params.id;
+        const status = await apiClient.getSwapStatus(swapId);
+        res.json(status);
+    }
+    catch (error) {
+        console.error('Error getting swap status:', error);
+        res.status(500).json({ error: 'Failed to get swap status' });
+    }
+});
+// Get quote
+app.post('/api/quote', async (req, res) => {
+    try {
+        const { fromCoin, toCoin, amount, fromNetwork, toNetwork } = req.body;
+        const quote = await apiClient.getQuote(fromCoin, toCoin, amount, fromNetwork, toNetwork);
+        res.json(quote);
+    }
+    catch (error) {
+        console.error('Error getting quote:', error);
+        res.status(500).json({ error: 'Failed to get quote' });
+    }
+});
+// Generate QR code
+app.get('/api/qr/:address', async (req, res) => {
+    try {
+        const address = req.params.address;
+        const qrCode = await QRCode.toDataURL(address);
+        res.json({ qrCode, address });
+    }
+    catch (error) {
+        console.error('Error generating QR code:', error);
+        res.status(500).json({ error: 'Failed to generate QR code' });
+    }
+});
+// Start Express server
+async function startServer() {
+    try {
+        const port = await findAvailablePort(3000);
+        app.listen(port, () => {
+            console.log(`🚀 INDEX_SERVER - Express API running on http://localhost:${port}`);
+            console.log(`📊 INDEX_SERVER - Health check: http://localhost:${port}/health`);
+            console.log(`🪙 INDEX_SERVER - Coins API: http://localhost:${port}/api/coins`);
+            console.log(`🔄 INDEX_SERVER - Swap API: http://localhost:${port}/api/swap`);
+            console.log(`💱 INDEX_SERVER - Quote API: http://localhost:${port}/api/quote`);
+        });
+    }
+    catch (error) {
+        console.error('❌ INDEX_SERVER - Failed to start server:', error);
+        process.exit(1);
+    }
+}
+// Start the server
+startServer();
 // Start the bot
+console.log("🤖 INDEX_SERVER - Starting advanced AI Telegram bot...");
 bot.launch();
 // Enable graceful stop
 process.once('SIGINT', () => bot.stop('SIGINT'));

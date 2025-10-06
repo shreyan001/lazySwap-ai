@@ -1,13 +1,4 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 const sideshift_api_1 = require("./sideshift-api");
 const groq_1 = require("@langchain/groq");
@@ -17,9 +8,9 @@ const model = new groq_1.ChatGroq({
     temperature: 0,
     apiKey: process.env.GROQ_API_KEY,
 });
-const REKT = () => __awaiter(void 0, void 0, void 0, function* () {
+const REKT = async () => {
     // Example using SideShift API
-    const coins = yield sideShiftAPI.getCoins();
+    const coins = await sideShiftAPI.getCoins();
     console.log('Available coins:', coins);
     // Create a variable swap
     const swapRequest = {
@@ -31,5 +22,5 @@ const REKT = () => __awaiter(void 0, void 0, void 0, function* () {
     //     const response = await swapSDK.getQuote(quoteRequest);
     // const parsedResult = JSON.stringify(response, null, 2);
     // console.log(response);
-});
+};
 REKT();
