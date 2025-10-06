@@ -1,0 +1,42 @@
+{
+  "name": "lazyswap",
+  "version": "1.0.0",
+  "description": "lazy swap is AI powered text to swap ",
+  "main": "index.mjs",
+  "scripts": {
+    "test": "tsc && nodemon --env-file .env --ext ts,js,mjs,cjs,json dir/placeholder.js",
+    "start": "node dir/server.js",
+    "dev": "nodemon --env-file .env --ext ts,js,mjs,cjs,json --exec \"tsc && node dir/server.js\"",
+    "build": "tsc",
+    "server": "ts-node server.ts"
+  },
+  "author": "gatesmanX12",
+  "license": "MIT",
+  "dependencies": {
+    "@langchain/cloudflare": "^0.0.6",
+    "@langchain/core": "^0.2.18",
+    "@langchain/groq": "^0.0.15",
+    "@langchain/langgraph": "^0.0.28",
+    "@langchain/openai": "^0.2.5",
+    "@types/react": "^19.2.0",
+    "axios": "^1.12.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^5.1.0",
+    "langchain": "^0.2.11",
+    "nodemon": "^3.1.4",
+    "qrcode": "^1.5.4",
+    "react": "^19.2.0",
+    "telegraf": "^4.16.3",
+    "tsc-node": "^0.0.3",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.3",
+    "@types/node": "^20.14.11",
+    "@types/qrcode": "^1.5.5",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.5.3"
+  }
+}
