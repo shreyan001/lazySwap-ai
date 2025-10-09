@@ -83,6 +83,5 @@ LazySwap revolutionizes cross-chain cryptocurrency swaps by combining artificial
 - [Try LazySwap](https://t.me/LazySwap_Bot)
 - [GitHub Repository](https://github.com/shreyan001/lazyswap)
 
-![LazySwap Workflow](https://cdn.dorahacks.io/static/files/191105c3cc5269f3940254e4b588bce3.png)
 
 LazySwap represents the future of cross-chain interactions, bridging the gap between complex blockchain operations and user-friendly experiences. By leveraging AI and SideShift's API, we're not just participating in the Cross Chain Hack; we're paving the way for more accessible blockchain interactions.
